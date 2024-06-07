@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -12,19 +13,19 @@
 #define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 
 // The following constants are for determing how row information will be stored in memory. Each row will contain an ID, a username, and an email, all of which will be adjacent in memory.
-#define ID_SIZE (u_int32_t)size_of_attribute(Row, id)
-#define USERNAME_SIZE (u_int32_t)size_of_attribute(Row, username)
-#define EMAIL_SIZE (u_int32_t)size_of_attribute(Row, email)
-#define ID_OFFSET (u_int32_t)0
-#define USERNAME_OFFSET (u_int32_t)ID_OFFSET+ID_SIZE
-#define EMAIL_OFFSET (u_int32_t)USERNAME_OFFSET+USERNAME_SIZE
-#define ROW_SIZE (u_int32_t)ID_SIZE+USERNAME_SIZE+EMAIL_SIZE
+#define ID_SIZE (uint32_t)size_of_attribute(Row, id)
+#define USERNAME_SIZE (uint32_t)size_of_attribute(Row, username)
+#define EMAIL_SIZE (uint32_t)size_of_attribute(Row, email)
+#define ID_OFFSET (uint32_t)0
+#define USERNAME_OFFSET (uint32_t)ID_OFFSET+ID_SIZE
+#define EMAIL_OFFSET (uint32_t)USERNAME_OFFSET+USERNAME_SIZE
+#define ROW_SIZE (uint32_t)ID_SIZE+USERNAME_SIZE+EMAIL_SIZE
 
 // now we do more memory shenanigans to create the Table structure
-#define PAGE_SIZE (u_int32_t)4096
+#define PAGE_SIZE (uint32_t)4096
 #define TABLE_MAX_PAGES 100
-#define ROWS_PER_PAGE (u_int32_t)PAGE_SIZE/ROW_SIZE
-#define TABLE_MAX_ROWS (u_int32_t)ROWS_PER_PAGE*TABLE_MAX_PAGES
+#define ROWS_PER_PAGE (uint32_t)PAGE_SIZE/ROW_SIZE
+#define TABLE_MAX_ROWS (uint32_t)ROWS_PER_PAGE*TABLE_MAX_PAGES
 
 // Create an InputBuffer object to handle tokenization of user input
 typedef struct {
@@ -91,7 +92,7 @@ typedef enum {
 } StatementType;
 
 typedef struct {
-    u_int32_t id;
+    uint32_t id;
     char username[COLUMN_USERNAME_SIZE];
     char email[COLUMN_EMAIL_SIZE];
 } Row;
@@ -102,7 +103,7 @@ typedef struct {
 } Statement;
 
 typedef struct {
-    u_int32_t num_rows;
+    uint32_t num_rows;
     void* pages[TABLE_MAX_PAGES];
 } Table;
 
@@ -121,23 +122,33 @@ void deserialize_row(void* source, Row* destination) {
 }
 
 // This properly locates rows in the page. It's more memory shenanigans
-void* row_slot(Table* table, u_int32_t row_num) {
-    u_int32_t page_num = row_num / ROWS_PER_PAGE;
+void* row_slot(Table* table, uint32_t row_num) {
+    uint32_t page_num = row_num / ROWS_PER_PAGE;
     void* page = table->pages[page_num];
     // only allocate memory when necessary
     if (page == NULL) {
         page = table->pages[page_num] = malloc(PAGE_SIZE);
     }
 
-    u_int32_t row_offset = row_num % ROWS_PER_PAGE;
-    u_int32_t byte_offset = row_offset * ROW_SIZE;
+    uint32_t row_offset = row_num % ROWS_PER_PAGE;
+    uint32_t byte_offset = row_offset * ROW_SIZE;
 
     return page + byte_offset;
 }
 
+// frees all the memory used to create the table
+void free_table(Table* table) {
+    for (uint32_t i = 0; table->pages[i]; i++) {
+        free(table->pages[i]);
+    }
+    free(table);
+}
+
 // parse meta commands
-MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
+MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table) {
     if (strcmp(input_buffer->buffer, ".exit") == 0) {
+        close_input_buffer(input_buffer);
+        free_table(table);
         exit(EXIT_SUCCESS);
     } else {
         return META_COMMAND_UNRECOGNIZED_COMMAND;
@@ -147,6 +158,7 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
 // parse sql commands
 PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement) {
     if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
+        statement->type = STATEMENT_INSERT;
         int args_assigned = sscanf(
             input_buffer->buffer, "insert %d %s %s", statement->row_to_insert.id, statement->row_to_insert.username, statement->row_to_insert.email
         );
@@ -192,19 +204,11 @@ ExecuteResult execute_statement(Statement* statement, Table* table) {
 Table* new_table() {
     Table* table = (Table*)malloc(sizeof(Table));
     table->num_rows = 0;
-    for (u_int32_t i = 0; i < TABLE_MAX_PAGES; i++) {
+    for (uint32_t i = 0; i < TABLE_MAX_PAGES; i++) {
         table->pages[i] = NULL;
     }
 
     return table;
-}
-
-// frees all the memory used to create the table
-void free_table(Table* table) {
-    for (u_int32_t i = 0; table->pages[i]; i++) {
-        free(table->pages[i]);
-    }
-    free(table);
 }
 
 int main(int arc, char* argv[]) {
@@ -215,13 +219,12 @@ int main(int arc, char* argv[]) {
         read_input(input_buffer);
 
         if (input_buffer->buffer[0] == '.') {
-            switch (do_meta_command(input_buffer))
-            {
-            case (META_COMMAND_SUCCESS):
-                continue;
-            case (META_COMMAND_UNRECOGNIZED_COMMAND):
-                printf("Unrecognized command '%s'\n", input_buffer->buffer);
-                continue;            
+            switch (do_meta_command(input_buffer, table)) {
+                case (META_COMMAND_SUCCESS):
+                    continue;
+                case (META_COMMAND_UNRECOGNIZED_COMMAND):
+                    printf("Unrecognized command '%s'\n", input_buffer->buffer);
+                    continue;
             }
         }
 
@@ -243,6 +246,7 @@ int main(int arc, char* argv[]) {
                 break;
             case (EXECUTE_TABLE_FULL):
                 printf("Error: Table full.\n");
+                break;
         }
     }
 }
