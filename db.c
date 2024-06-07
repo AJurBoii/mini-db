@@ -4,6 +4,13 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+// establishes how much space to be allocated for usernames and emails
+#define COLUMN_USERNAME_SIZE 32
+#define COLUMN_EMAIL_SIZE 255
+
+// defines a quick way to grab the size of an attribute of an object (struct)
+#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
+
 // Create an InputBuffer object to handle tokenization of user input
 typedef struct {
     char* buffer;
@@ -53,6 +60,7 @@ typedef enum {
 // define return values for processing statements, to be used by prepare_statement()
 typedef enum {
     PREPARE_SUCCESS,
+    PREPARE_SYNTAX_ERROR,
     PREPARE_UNRECOGNIZED_STATEMENT
 } PrepareResult;
 
@@ -62,8 +70,24 @@ typedef enum {
 } StatementType;
 
 typedef struct {
+    u_int32_t id;
+    char username[COLUMN_USERNAME_SIZE];
+    char email[COLUMN_EMAIL_SIZE];
+} Row;
+
+typedef struct {
     StatementType type;
+    Row row_to_insert;
 } Statement;
+
+// The following constants are for determing how row information will be stored in memory. Each row will contain an ID, a username, and an email, all of which will be adjacent in memory.
+#define ID_SIZE (u_int32_t)size_of_attribute(Row, id)
+#define USERNAME_SIZE (u_int32_t)size_of_attribute(Row, username)
+#define EMAIL_SIZE (u_int32_t)size_of_attribute(Row, email)
+#define ID_OFFSET (u_int32_t)0
+#define USERNAME_OFFSET (u_int32_t)ID_OFFSET+ID_SIZE
+#define EMAIL_OFFSET (u_int32_t)USERNAME_OFFSET+USERNAME_SIZE
+#define ROW_SIZE (u_int32_t)ID_SIZE+USERNAME_SIZE+EMAIL_SIZE
 
 // parse meta commands
 MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
@@ -77,9 +101,15 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
 // parse sql commands, rn it doesn't really do anything
 PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement) {
     if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
-        statement->type = STATEMENT_INSERT;
+        int args_assigned = sscanf(
+            input_buffer->buffer, "insert %d %s %s", statement->row_to_insert.id, statement->row_to_insert.username, statement->row_to_insert.email
+        );
+        if (args_assigned < 3) {
+            return PREPARE_SYNTAX_ERROR;
+        }
         return PREPARE_SUCCESS;
     }
+
     if (strcmp(input_buffer->buffer, "select") == 0) {
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
