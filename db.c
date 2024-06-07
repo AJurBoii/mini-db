@@ -200,8 +200,7 @@ ExecuteResult execute_statement(Statement* statement, Table* table) {
         case (STATEMENT_INSERT):
             return execute_insert(statement, table);
         case (STATEMENT_SELECT):
-            printf("This would execute a select.\n");
-            break;
+            return execute_select(statement, table);
     }
 }
 
