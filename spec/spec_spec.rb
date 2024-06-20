@@ -33,5 +33,6 @@ describe 'database' do
         end
         script << ".exit"
         result = run_script(script)
-        expect(result[-2].to eq('db > Error: Table full.'))
+        expect(result[-2]).to eq('db > Error: Table full.')
+    end
 end
