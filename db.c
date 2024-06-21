@@ -4,6 +4,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 // Create an InputBuffer object to handle tokenization of user input
 typedef struct {
@@ -72,8 +76,14 @@ const uint32_t ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
 const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
 typedef struct {
-    uint32_t num_rows;
+    int file_descriptor;
+    u_int32_t file_length;
     void* pages[TABLE_MAX_PAGES];
+} Pager;
+
+typedef struct {
+    uint32_t num_rows;
+    Pager* pager;
 } Table;
 
 void print_row(Row* row) {
@@ -93,14 +103,43 @@ void deserialize_row(void* source, Row* destination) {
     memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE);
 }
 
+// get_page() will do one of the following three things: (1) find the requested page in memory, (2) if no page exists in memory, allocate space for it, (3) returns error if page limit is exceeded
+void* get_page(Pager* pager, u_int32_t page_num) {
+    if (page_num > TABLE_MAX_PAGES) {
+        printf("Tried to fetch page number out of bounds. %d > %d\n", page_num, TABLE_MAX_PAGES);
+        exit(EXIT_FAILURE);
+    }
+
+    if (pager->pages[page_num] == NULL) {
+        // cache miss!! allocate memory and load from file
+        void* page = malloc(PAGE_SIZE);
+        u_int32_t num_pages = pager->file_length / PAGE_SIZE;
+
+        // could potentially save part of an extra page at the end of the file
+        if (pager->file_length % PAGE_SIZE) {
+            num_pages += 1;
+        }
+
+        if (page_num <= num_pages) {
+            // moves 
+            lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
+            ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
+            if (bytes_read == -1) {
+                printf("Error reading file: %d\n", errno);
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        pager->pages[page_num] = page;
+    }
+
+    return pager->pages[page_num];
+}
+
 // This properly locates rows in the page. It's more memory shenanigans
 void* row_slot(Table* table, uint32_t row_num) {
     uint32_t page_num = row_num / ROWS_PER_PAGE;
-    void* page = table->pages[page_num];
-    // only allocate memory when necessary
-    if (page == NULL) {
-        page = table->pages[page_num] = malloc(PAGE_SIZE);
-    }
+    void* page = get_page(table->pager, page_num);
 
     uint32_t row_offset = row_num % ROWS_PER_PAGE;
     uint32_t byte_offset = row_offset * ROW_SIZE;
@@ -108,15 +147,88 @@ void* row_slot(Table* table, uint32_t row_num) {
     return page + byte_offset;
 }
 
-// function that initializes a table
-Table* new_table() {
-    Table* table = (Table*)malloc(sizeof(Table));
-    table->num_rows = 0;
-    for (uint32_t i = 0; i < TABLE_MAX_PAGES; i++) {
-        table->pages[i] = NULL;
+// opens the database file and keeps track of its size in memory
+Pager* pager_open(const char* filename) {
+    /**
+     * O_RDWR: Read/write mode
+     * O_CREAT: Create file if it doesn't exist
+     * S_IWUSR: User write permission
+     * S_IRUSR: User read permission
+    */
+    int fd = open(filename, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
+    
+    if (fd == -1) {
+        printf("Unable to open file\n");
+        exit(EXIT_FAILURE);
     }
 
+    // off_t is a data type used for I/O functionality. among other things its used to handle potentially large files
+    off_t file_length = lseek(fd, 0, SEEK_END);
+
+    Pager* pager = malloc(sizeof(Pager));
+    pager->file_descriptor = fd;
+    pager->file_length = file_length;
+
+    for (u_int32_t i = 0; i < TABLE_MAX_PAGES; i++) {
+        pager->pages[i] = NULL;
+    }
+
+    return pager;
+}
+
+// function that establishes a connection to the database file. this function replaces the previous new_table(), and now takes the file name as its only parameter
+Table* db_open(const char* filename) {
+    Pager* pager = pager_open(filename);
+    u_int32_t num_rows = pager->file_length / ROW_SIZE;
+
+    Table* table = (Table*)malloc(sizeof(Table));
+    table->pager = pager;
+    table->num_rows = num_rows;
+
     return table;
+}
+
+// flushes page cache to disk, closes database file, and frees memory allocated for Pager and Table data structures
+void db_close(Table* table) {
+    Pager* pager = table->pager;
+    u_int32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
+
+    for (u_int32_t i = 0; i < num_full_pages; i++) {
+        if (pager->pages[i] == NULL) {
+            continue;
+        }
+        pager_flush(pager, i, PAGE_SIZE);
+        free(pager->pages[i]);
+        pager->pages[i] = NULL;
+    }
+
+    // there might be a partial page written at the end of the file
+    // after the B-tree is implemented this will no longer be necessary (at least according to the tutorial im just some guy lol)
+    u_int32_t num_additional_rows = table->num_rows % ROWS_PER_PAGE;
+    if (num_additional_rows > 0) {
+        u_int32_t page_num = num_full_pages;
+        if (pager->pages[page_num] != NULL) {
+            pager_flush(pager, page_num, num_additional_rows * ROW_SIZE);
+            free(pager->pages[page_num]);
+            pager->pages[page_num] = NULL;
+        }
+    }
+
+    int result = close(pager->file_descriptor);
+    if (result == -1) {
+        printf("Error closing db file.\n");
+        exit(EXIT_FAILURE);
+    }
+    for (u_int32_t i = 0; i < TABLE_MAX_PAGES; i++) {
+        void* page = pager->pages[i];
+        if (page) {
+            free(page);
+            pager->pages[i] = NULL;
+        }
+    }
+
+    free(pager);
+    free(table);
 }
 
 // frees all the memory used to create the table
@@ -145,8 +257,7 @@ void close_input_buffer(InputBuffer* input_buffer) {
 // parse meta commands
 MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table) {
     if (strcmp(input_buffer->buffer, ".exit") == 0) {
-        close_input_buffer(input_buffer);
-        free_table(table);
+        db_close(table);
         exit(EXIT_SUCCESS);
     } else {
         return META_COMMAND_UNRECOGNIZED_COMMAND;
