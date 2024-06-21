@@ -252,14 +252,6 @@ void db_close(Table* table) {
     free(table);
 }
 
-// frees all the memory used to create the table
-void free_table(Table* table) {
-    for (uint32_t i = 0; table->pages[i]; i++) {
-        free(table->pages[i]);
-    }
-    free(table);
-}
-
 // method for initializing an InputBuffer object
 InputBuffer* new_input_buffer() {
     InputBuffer* input_buffer = malloc(sizeof(InputBuffer));
@@ -383,9 +375,16 @@ void read_input(InputBuffer* input_buffer) {
     input_buffer->buffer[bytes_read - 1] = 0;
 }
 
-int main(int arc, char* argv[]) {
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Must supply a database filename.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    char* filename = argv[1];
+    Table* table = db_open(filename);
+
     InputBuffer* input_buffer = new_input_buffer();
-    Table* table = new_table();
     while(true) {
         print_prompt();
         read_input(input_buffer);
