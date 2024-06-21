@@ -188,6 +188,27 @@ Table* db_open(const char* filename) {
     return table;
 }
 
+void pager_flush(Pager* pager, u_int32_t page_num, u_int32_t size) {
+    if (pager->pages[page_num] == NULL) {
+        printf("Tried to flush null page\n");
+        exit(EXIT_FAILURE);
+    }
+
+    off_t offset = lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
+    if (offset == -1) {
+        printf("Error seeking: %d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    ssize_t bytes_written = 
+        write(pager->file_descriptor, pager->pages[page_num], size);
+
+    if (bytes_written == -1) {
+        printf("Error writing: %d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+}
+
 // flushes page cache to disk, closes database file, and frees memory allocated for Pager and Table data structures
 void db_close(Table* table) {
     Pager* pager = table->pager;
