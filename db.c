@@ -75,16 +75,25 @@ const uint32_t PAGE_SIZE = 4096;
 const uint32_t ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
 const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
+// a Pager object helps connect a Table and its contents to a database file. it also helps navigate through such db files
 typedef struct {
     int file_descriptor;
     u_int32_t file_length;
     void* pages[TABLE_MAX_PAGES];
 } Pager;
 
+// defines our Table object. num_rows describes size of the table and pager is a data type that helps access pages within a table
 typedef struct {
     uint32_t num_rows;
     Pager* pager;
 } Table;
+
+// defines a Cursor object which is designed to help navigate through the database table. it is defined with a Table so that all cursor functions only require a Cursor parameter.
+typedef struct {
+    Table* table;
+    u_int32_t row_num;
+    bool end_of_table;
+} Cursor;
 
 void print_row(Row* row) {
     printf("(%d, %s, %s)\n", row->id, row->username, row->email);
