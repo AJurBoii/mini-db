@@ -176,6 +176,18 @@ void* row_slot(Table* table, uint32_t row_num) {
     return page + byte_offset;
 }
 
+// cursor_value() replaces previous row_slot() function. it returns the location of the cursor within its associated table.
+void* cursor_value(Cursor* cursor) {
+    u_int32_t row_num = cursor->row_num;
+    u_int32_t page_num = row_num / ROWS_PER_PAGE;
+    void* page = get_page(cursor->table->pager, page_num);
+
+    u_int32_t row_offset = row_num % ROWS_PER_PAGE;
+    u_int32_t byte_offset = row_offset * ROW_SIZE;
+
+    return page + byte_offset;
+}
+
 // opens the database file and keeps track of its size in memory
 Pager* pager_open(const char* filename) {
     /**
