@@ -388,11 +388,13 @@ ExecuteResult execute_select(Statement* statement, Table* table) {
     // }
 
     Cursor* cursor = table_start(table);
-    for (u_int32_t i = 0; i < cursor->table->num_rows; i++) {
+    while (!(cursor->end_of_table)) {
         deserialize_row(cursor_value(cursor), &row);
-        cursor_advance(cursor);
         print_row(&row);
+        cursor_advance(cursor);
     }
+
+    free(cursor);
 
     return EXECUTE_SUCCESS;
 }
