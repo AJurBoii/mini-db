@@ -177,6 +177,14 @@ void* cursor_value(Cursor* cursor) {
     return page + byte_offset;
 }
 
+// moves the cursor forward in the table. really simple, just increments row number and checks if the end of the table is reached
+void cursor_advance(Cursor* cursor) {
+    cursor->row_num += 1;
+    if (cursor->row_num >= cursor->table->num_rows) {
+        cursor->end_of_table = true;
+    }
+}
+
 // opens the database file and keeps track of its size in memory
 Pager* pager_open(const char* filename) {
     /**
