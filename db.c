@@ -102,6 +102,28 @@ const u_int32_t LEAF_NODE_VALUE_SIZE = ROW_SIZE;
 const u_int32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE;
 const u_int32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
 
+// some pointer arithmetic functions that return pointers to values, so the functions can be used both as getters and setters
+
+u_int32_t* leaf_node_num_cells(void* node) {
+    return node + LEAF_NODE_NUM_CELLS_OFFSET;
+}
+
+void* leaf_node_cell(void* node, u_int32_t cell_num) {
+    return node + LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE;
+}
+
+u_int32_t* leaf_node_key(void* node, u_int32_t cell_num) {
+    return leaf_node_cell(node, cell_num);
+}
+
+void* leaf_node_value(void* node, u_int32_t cell_num) {
+    return leaf_node_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
+}
+
+void initialize_leaf_node(void* node) {
+    *leaf_node_num_cells(node) = 0;
+}
+
 // a Pager object helps connect a Table and its contents to a database file. it also helps navigate through such db files
 typedef struct {
     int file_descriptor;
