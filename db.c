@@ -71,9 +71,8 @@ const u_int32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
 // now we do more memory shenanigans to create the Table structure
 const uint32_t PAGE_SIZE = 4096;
-#define TABLE_MAX_PAGES 100
-const uint32_t ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
-const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
+const u_int32_t TABLE_MAX_PAGES = 100;
+
 
 // keeps track of node type for our B-tree data structure
 typedef enum {
@@ -128,13 +127,14 @@ void initialize_leaf_node(void* node) {
 typedef struct {
     int file_descriptor;
     u_int32_t file_length;
+    u_int32_t num_pages;
     void* pages[TABLE_MAX_PAGES];
 } Pager;
 
 // defines our Table object. num_rows describes size of the table and pager is a data type that helps access pages within a table
 typedef struct {
-    uint32_t num_rows;
     Pager* pager;
+    u_int32_t root_page_num;
 } Table;
 
 // defines a Cursor object which is designed to help navigate through the database table. it is defined with a Table so that all cursor functions only require a Cursor parameter.
@@ -209,6 +209,10 @@ void* get_page(Pager* pager, u_int32_t page_num) {
         }
 
         pager->pages[page_num] = page;
+
+        if (page_num >= pager->num_pages) {
+            pager->num_pages = page_num + 1;
+        }
     }
 
     return pager->pages[page_num];
@@ -255,6 +259,12 @@ Pager* pager_open(const char* filename) {
     Pager* pager = malloc(sizeof(Pager));
     pager->file_descriptor = fd;
     pager->file_length = file_length;
+    pager->num_pages = (file_length / PAGE_SIZE);
+
+    if (file_length % PAGE_SIZE != 0) {
+        printf("Db file is not a whole number of pages. Corrupt file.\n");
+        exit(EXIT_FAILURE);
+    }
 
     for (u_int32_t i = 0; i < TABLE_MAX_PAGES; i++) {
         pager->pages[i] = NULL;
@@ -275,7 +285,7 @@ Table* db_open(const char* filename) {
     return table;
 }
 
-void pager_flush(Pager* pager, u_int32_t page_num, u_int32_t size) {
+void pager_flush(Pager* pager, u_int32_t page_num) {
     if (pager->pages[page_num] == NULL) {
         printf("Tried to flush null page\n");
         exit(EXIT_FAILURE);
@@ -288,7 +298,7 @@ void pager_flush(Pager* pager, u_int32_t page_num, u_int32_t size) {
     }
 
     ssize_t bytes_written = 
-        write(pager->file_descriptor, pager->pages[page_num], size);
+        write(pager->file_descriptor, pager->pages[page_num], PAGE_SIZE);
 
     if (bytes_written == -1) {
         printf("Error writing: %d\n", errno);
@@ -301,25 +311,13 @@ void db_close(Table* table) {
     Pager* pager = table->pager;
     u_int32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
 
-    for (u_int32_t i = 0; i < num_full_pages; i++) {
+    for (u_int32_t i = 0; i < pager->num_pages; i++) {
         if (pager->pages[i] == NULL) {
             continue;
         }
-        pager_flush(pager, i, PAGE_SIZE);
+        pager_flush(pager, i);
         free(pager->pages[i]);
         pager->pages[i] = NULL;
-    }
-
-    // there might be a partial page written at the end of the file
-    // after the B-tree is implemented this will no longer be necessary (at least according to the tutorial im just some guy lol)
-    u_int32_t num_additional_rows = table->num_rows % ROWS_PER_PAGE;
-    if (num_additional_rows > 0) {
-        u_int32_t page_num = num_full_pages;
-        if (pager->pages[page_num] != NULL) {
-            pager_flush(pager, page_num, num_additional_rows * ROW_SIZE);
-            free(pager->pages[page_num]);
-            pager->pages[page_num] = NULL;
-        }
     }
 
     int result = close(pager->file_descriptor);
