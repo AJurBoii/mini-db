@@ -100,6 +100,9 @@ const u_int32_t LEAF_NODE_KEY_OFFSET = 0;
 const u_int32_t LEAF_NODE_VALUE_SIZE = ROW_SIZE;
 const u_int32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE;
 const u_int32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
+const u_int32_t LEAF_NODE_SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
+const u_int32_t LEAF_NODE_MAX_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
+
 
 // some pointer arithmetic functions that return pointers to values, so the functions can be used both as getters and setters
 u_int32_t* leaf_node_num_cells(void* node) {
@@ -337,7 +340,6 @@ void leaf_node_insert(Cursor* cursor, u_int32_t key, Row* value) {
 // flushes page cache to disk, closes database file, and frees memory allocated for Pager and Table data structures
 void db_close(Table* table) {
     Pager* pager = table->pager;
-    u_int32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
 
     for (u_int32_t i = 0; i < pager->num_pages; i++) {
         if (pager->pages[i] == NULL) {
