@@ -71,7 +71,7 @@ const u_int32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
 // now we do more memory shenanigans to create the Table structure
 const uint32_t PAGE_SIZE = 4096;
-const u_int32_t TABLE_MAX_PAGES = 100;
+#define TABLE_MAX_PAGES 100
 
 
 // keeps track of node type for our B-tree data structure
@@ -147,30 +147,6 @@ typedef struct {
     bool end_of_table;
 } Cursor;
 
-// table_start() creates a new Cursor, which involves attaching a Table to it
-Cursor* table_start(Table* table) {
-    Cursor* cursor = malloc(sizeof(Cursor));
-    cursor->table = table;
-    cursor->page_num = table->root_page_num;
-    cursor->cell_num = 0;
-
-    return cursor;
-}
-
-// table_end() also creates a new Cursor, but places it at the end of the Table
-Cursor* table_end(Table* table) {
-    Cursor* cursor = malloc(sizeof(Cursor));
-    cursor->table = table;
-    cursor->page_num = table->root_page_num;
-
-    void* root_node = get_page(table->pager, table->root_page_num);
-    u_int32_t num_cells = *leaf_node_num_cells(root_node);
-    cursor->cell_num = num_cells;
-    cursor->end_of_table = true;
-
-    return cursor;
-}
-
 void print_row(Row* row) {
     printf("(%d, %s, %s)\n", row->id, row->username, row->email);
 }
@@ -224,6 +200,30 @@ void* get_page(Pager* pager, u_int32_t page_num) {
 
     return pager->pages[page_num];
 
+}
+
+// table_start() creates a new Cursor, which involves attaching a Table to it
+Cursor* table_start(Table* table) {
+    Cursor* cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->page_num = table->root_page_num;
+    cursor->cell_num = 0;
+
+    return cursor;
+}
+
+// table_end() also creates a new Cursor, but places it at the end of the Table
+Cursor* table_end(Table* table) {
+    Cursor* cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->page_num = table->root_page_num;
+
+    void* root_node = get_page(table->pager, table->root_page_num);
+    u_int32_t num_cells = *leaf_node_num_cells(root_node);
+    cursor->cell_num = num_cells;
+    cursor->end_of_table = true;
+
+    return cursor;
 }
 
 // cursor_value() replaces previous row_slot() function. it returns the location of the cursor within its associated table.
@@ -504,7 +504,7 @@ void print_constants() {
     printf("LEAF_NODE_HEADER_SIZE: %d\n", LEAF_NODE_HEADER_SIZE);
     printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
     printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
-    printf("LEAF_NODE_MAX_CELLS %d\n", LEAF_NODE_MAX_CELLS);
+    printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
 }
 
 // prints visualization of the tree
