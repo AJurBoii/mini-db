@@ -42,6 +42,39 @@ typedef enum {
     STATEMENT_SELECT
 } StatementType;
 
+// establishes how much space to be allocated for usernames and emails
+#define COLUMN_USERNAME_SIZE 32
+#define COLUMN_EMAIL_SIZE 255
+
+typedef struct {
+    uint32_t id;
+    char username[COLUMN_USERNAME_SIZE + 1];
+    char email[COLUMN_EMAIL_SIZE + 1];
+} Row;
+
+typedef struct {
+    StatementType type;
+    Row row_to_insert;
+} Statement;
+
+// defines a quick way to grab the size of an attribute of an object (struct)
+#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
+
+// The following constants are for determing how row information will be stored in memory. Each row will contain an ID, a username, and an email, all of which will be adjacent in memory.
+const u_int32_t ID_SIZE = size_of_attribute(Row, id);
+const u_int32_t USERNAME_SIZE = size_of_attribute(Row, username);
+const u_int32_t EMAIL_SIZE = size_of_attribute(Row, email);
+const u_int32_t ID_OFFSET = 0;
+const u_int32_t USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
+const u_int32_t EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
+const u_int32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
+
+// now we do more memory shenanigans to create the Table structure
+const uint32_t PAGE_SIZE = 4096;
+#define TABLE_MAX_PAGES 100
+const uint32_t ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
+const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
+
 // keeps track of node type for our B-tree data structure
 typedef enum {
     NODE_INTERNAL,
@@ -62,38 +95,12 @@ const u_int32_t LEAF_NODE_NUM_CELLS_SIZE = sizeof(u_int32_t);
 const u_int32_t LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
 const u_int32_t LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE;
 
-// establishes how much space to be allocated for usernames and emails
-#define COLUMN_USERNAME_SIZE 32
-#define COLUMN_EMAIL_SIZE 255
-
-typedef struct {
-    uint32_t id;
-    char username[COLUMN_USERNAME_SIZE + 1];
-    char email[COLUMN_EMAIL_SIZE + 1];
-} Row;
-
-typedef struct {
-    StatementType type;
-    Row row_to_insert;
-} Statement;
-
-// defines a quick way to grab the size of an attribute of an object (struct)
-#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
-
-// The following constants are for determing how row information will be stored in memory. Each row will contain an ID, a username, and an email, all of which will be adjacent in memory.
-const uint32_t ID_SIZE = size_of_attribute(Row, id);
-const uint32_t USERNAME_SIZE = size_of_attribute(Row, username);
-const uint32_t EMAIL_SIZE = size_of_attribute(Row, email);
-const uint32_t ID_OFFSET = 0;
-const uint32_t USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
-const uint32_t EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
-const uint32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
-
-// now we do more memory shenanigans to create the Table structure
-const uint32_t PAGE_SIZE = 4096;
-#define TABLE_MAX_PAGES 100
-const uint32_t ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
-const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
+// leaf node body layout
+const u_int32_t LEAF_NODE_KEY_SIZE = sizeof(u_int32_t);
+const u_int32_t LEAF_NODE_KEY_OFFSET = 0;
+const u_int32_t LEAF_NODE_VALUE_SIZE = ROW_SIZE;
+const u_int32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE;
+const u_int32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
 
 // a Pager object helps connect a Table and its contents to a database file. it also helps navigate through such db files
 typedef struct {
