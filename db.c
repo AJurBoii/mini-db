@@ -19,6 +19,7 @@ typedef struct {
 // define return values for executing commands
 typedef enum {
     EXECUTE_TABLE_FULL,
+    EXECUTE_DUPLICATE_KEY,
     EXECUTE_SUCCESS
 } ExecuteResult;
 
@@ -146,6 +147,30 @@ typedef struct {
     u_int32_t cell_num;
     bool end_of_table;
 } Cursor;
+
+// table_start() creates a new Cursor, which involves attaching a Table to it
+Cursor* table_start(Table* table) {
+    Cursor* cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->page_num = table->root_page_num;
+    cursor->cell_num = 0;
+
+    return cursor;
+}
+
+// returns the position of the given key in the tree. if key isn't present, return the position where it should be inserted
+Cursor* table_find(Table* table, u_int32_t key) {
+    u_int32_t root_page_num = table->root_page_num;
+    void* root_node = get_page(table->pager, root_page_num);
+
+    if (get_node_type(root_node) == NODE_LEAF) {
+        return leaf_node_find(table, root_page_num, key);
+    } else {
+        printf("Need to implement searching an internal node\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 
 void print_row(Row* row) {
     printf("(%d, %s, %s)\n", row->id, row->username, row->email);
@@ -452,12 +477,21 @@ PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement)
 // execute the insert command!! takes the information (id, username, email) from the statement and inserts it into the table
 ExecuteResult execute_insert(Statement* statement, Table* table) {
     void* node = get_page(table->pager, table->root_page_num);
-    if ((*leaf_node_num_cells(node) >= LEAF_NODE_MAX_CELLS)) {
+    u_int32_t num_cells = (*leaf_node_num_cells(node));
+    if (num_cells >= LEAF_NODE_MAX_CELLS) {
         return EXECUTE_TABLE_FULL;
     }
 
     Row* row_to_insert = &(statement->row_to_insert);
-    Cursor* cursor = table_end(table);
+    u_int32_t key_to_insert = row_to_insert->id;
+    Cursor* cursor = table_find(table, key_to_insert);
+
+    if (cursor->cell_num < num_cells) {
+        u_int32_t key_at_index = *leaf_node_key(node, cursor->cell_num);
+        if (key_at_index == key_to_insert) {
+            return EXECUTE_DUPLICATE_KEY;
+        }
+    }
 
     leaf_node_insert(cursor, row_to_insert->id, row_to_insert);
 
