@@ -102,7 +102,6 @@ const u_int32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SI
 const u_int32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
 
 // some pointer arithmetic functions that return pointers to values, so the functions can be used both as getters and setters
-
 u_int32_t* leaf_node_num_cells(void* node) {
     return node + LEAF_NODE_NUM_CELLS_OFFSET;
 }
@@ -140,7 +139,8 @@ typedef struct {
 // defines a Cursor object which is designed to help navigate through the database table. it is defined with a Table so that all cursor functions only require a Cursor parameter.
 typedef struct {
     Table* table;
-    u_int32_t row_num;
+    u_int32_t page_num;
+    u_int32_t cell_num;
     bool end_of_table;
 } Cursor;
 
@@ -148,8 +148,8 @@ typedef struct {
 Cursor* table_start(Table* table) {
     Cursor* cursor = malloc(sizeof(Cursor));
     cursor->table = table;
-    cursor->row_num = 0;
-    cursor->end_of_table = (table->num_rows == 0);
+    cursor->page_num = table->root_page_num;
+    cursor->cell_num = 0;
 
     return cursor;
 }
@@ -158,7 +158,11 @@ Cursor* table_start(Table* table) {
 Cursor* table_end(Table* table) {
     Cursor* cursor = malloc(sizeof(Cursor));
     cursor->table = table;
-    cursor->row_num = table->num_rows;
+    cursor->page_num = table->root_page_num;
+
+    void* root_node = get_page(table->pager, table->root_page_num);
+    u_int32_t num_cells = *leaf_node_num_cells(root_node);
+    cursor->cell_num = num_cells;
     cursor->end_of_table = true;
 
     return cursor;
@@ -220,20 +224,19 @@ void* get_page(Pager* pager, u_int32_t page_num) {
 
 // cursor_value() replaces previous row_slot() function. it returns the location of the cursor within its associated table.
 void* cursor_value(Cursor* cursor) {
-    u_int32_t row_num = cursor->row_num;
-    u_int32_t page_num = row_num / ROWS_PER_PAGE;
+    u_int32_t page_num = cursor->page_num;
     void* page = get_page(cursor->table->pager, page_num);
 
-    u_int32_t row_offset = row_num % ROWS_PER_PAGE;
-    u_int32_t byte_offset = row_offset * ROW_SIZE;
-
-    return page + byte_offset;
+    return leaf_node_value(page, cursor->cell_num);
 }
 
 // moves the cursor forward in the table. really simple, just increments row number and checks if the end of the table is reached
 void cursor_advance(Cursor* cursor) {
-    cursor->row_num += 1;
-    if (cursor->row_num >= cursor->table->num_rows) {
+    u_int32_t page_num = cursor->page_num;
+    void* node = get_page(cursor->table->pager, page_num);
+
+    cursor->cell_num += 1;
+    if (cursor->cell_num >= (*leaf_node_num_cells(node))) {
         cursor->end_of_table = true;
     }
 }
@@ -276,11 +279,15 @@ Pager* pager_open(const char* filename) {
 // function that establishes a connection to the database file. this function replaces the previous new_table(), and now takes the file name as its only parameter
 Table* db_open(const char* filename) {
     Pager* pager = pager_open(filename);
-    u_int32_t num_rows = pager->file_length / ROW_SIZE;
 
     Table* table = (Table*)malloc(sizeof(Table));
     table->pager = pager;
-    table->num_rows = num_rows;
+    table->root_page_num = 0;
+
+    if (pager->num_pages == 0) {
+        void* root_node = get_page(pager, 0);
+        initialize_leaf_node(root_node);
+    }
 
     return table;
 }
@@ -304,6 +311,27 @@ void pager_flush(Pager* pager, u_int32_t page_num) {
         printf("Error writing: %d\n", errno);
         exit(EXIT_FAILURE);
     }
+}
+
+// inserts a node into the B-tree
+void leaf_node_insert(Cursor* cursor, u_int32_t key, Row* value) {
+    void* node = get_page(cursor->table->pager, cursor->page_num);
+
+    u_int32_t num_cells = *leaf_node_num_cells(node);
+    if (num_cells >= LEAF_NODE_MAX_CELLS) {
+        printf("Need to implement splitting leaf node.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (cursor->cell_num < num_cells) {
+        for (u_int32_t i = num_cells; i > cursor->cell_num; i--) {
+            memcpy(leaf_node_cell(node, i), leaf_node_cell(node, i - 1), LEAF_NODE_CELL_SIZE);
+        }
+    }
+
+    *(leaf_node_num_cells(node)) += 1;
+    *(leaf_node_key(node, cursor->cell_num)) = key;
+    serialize_row(value, leaf_node_value(node, cursor->cell_num));
 }
 
 // flushes page cache to disk, closes database file, and frees memory allocated for Pager and Table data structures
@@ -357,6 +385,10 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table) {
     if (strcmp(input_buffer->buffer, ".exit") == 0) {
         db_close(table);
         exit(EXIT_SUCCESS);
+    } else if (strcmp(input_buffer->buffer, ".constants") == 0) {
+        printf("Constants:\n");
+        print_constants();
+        return META_COMMAND_SUCCESS;
     } else {
         return META_COMMAND_UNRECOGNIZED_COMMAND;
     }
@@ -412,15 +444,15 @@ PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement)
 
 // execute the insert command!! takes the information (id, username, email) from the statement and inserts it into the table
 ExecuteResult execute_insert(Statement* statement, Table* table) {
-    if (table->num_rows >= TABLE_MAX_ROWS) {
+    void* node = get_page(table->pager, table->root_page_num);
+    if ((*leaf_node_num_cells(node) >= LEAF_NODE_MAX_CELLS)) {
         return EXECUTE_TABLE_FULL;
     }
 
     Row* row_to_insert = &(statement->row_to_insert);
     Cursor* cursor = table_end(table);
 
-    serialize_row(row_to_insert, cursor_value(cursor));
-    table->num_rows += 1;
+    leaf_node_insert(cursor, row_to_insert->id, row_to_insert);
 
     free(cursor);
 
@@ -457,6 +489,15 @@ ExecuteResult execute_statement(Statement* statement, Table* table) {
 
 // print prompt to the output to indicate user input
 void print_prompt() { printf("db > "); }
+
+void print_constants() {
+    printf("ROW_SIZE: %d\n", ROW_SIZE);
+    printf("COMMON_NODE_HEADER_SIZE: %d\n", COMMON_NODE_HEADER_SIZE);
+    printf("LEAF_NODE_HEADER_SIZE: %d\n", LEAF_NODE_HEADER_SIZE);
+    printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
+    printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
+    printf("LEAF_NODE_MAX_CELLS %d\n", LEAF_NODE_MAX_CELLS);
+}
 
 // Reads and stores user input
 void read_input(InputBuffer* input_buffer) {
