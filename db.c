@@ -148,6 +148,75 @@ typedef struct {
     bool end_of_table;
 } Cursor;
 
+// get_page() will do one of the following three things: (1) find the requested page in memory, (2) if no page exists in memory, allocate space for it, (3) returns error if page limit is exceeded
+void* get_page(Pager* pager, u_int32_t page_num) {
+    if (page_num > TABLE_MAX_PAGES) {
+        printf("Tried to fetch page number out of bounds. %d > %d\n", page_num, TABLE_MAX_PAGES);
+        exit(EXIT_FAILURE);
+    }
+
+    if (pager->pages[page_num] == NULL) {
+        // cache miss!! allocate memory and load from file
+        void* page = malloc(PAGE_SIZE);
+        u_int32_t num_pages = pager->file_length / PAGE_SIZE;
+
+        // could potentially save part of an extra page at the end of the file
+        if (pager->file_length % PAGE_SIZE) {
+            num_pages += 1;
+        }
+
+        if (page_num <= num_pages) {
+            // moves 
+            lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
+            ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
+            if (bytes_read == -1) {
+                printf("Error reading file: %d\n", errno);
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        pager->pages[page_num] = page;
+
+        if (page_num >= pager->num_pages) {
+            pager->num_pages = page_num + 1;
+        }
+    }
+
+    return pager->pages[page_num];
+
+}
+
+// search for a leaf node using binary search
+Cursor* leaf_node_find(Table* table, u_int32_t page_num, u_int32_t key) {
+    void* node = get_page(table->pager, page_num);
+    u_int32_t num_cells = *leaf_node_num_cells(node);
+
+    Cursor* cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->page_num = page_num;
+
+    // binary search
+    u_int32_t min_index = 0;
+    u_int32_t one_past_max_index = num_cells;
+    
+    while (one_past_max_index != min_index) {
+        u_int32_t index = (min_index + one_past_max_index) / 2;
+        u_int32_t key_at_index = *leaf_node_key(node, index);
+        if (key == key_at_index) {
+            cursor->cell_num = index;
+            return cursor;
+        }
+        if (key < key_at_index) {
+            one_past_max_index = index;
+        } else {
+            min_index = index + 1;
+        }
+    }
+
+    cursor->cell_num = min_index;
+    return cursor;
+}
+
 // table_start() creates a new Cursor, which involves attaching a Table to it
 Cursor* table_start(Table* table) {
     Cursor* cursor = malloc(sizeof(Cursor));
@@ -187,54 +256,6 @@ void deserialize_row(void* source, Row* destination) {
     memcpy(&(destination->id), source + ID_OFFSET, ID_SIZE);
     memcpy(&(destination->username), source + USERNAME_OFFSET, USERNAME_SIZE);
     memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE);
-}
-
-// get_page() will do one of the following three things: (1) find the requested page in memory, (2) if no page exists in memory, allocate space for it, (3) returns error if page limit is exceeded
-void* get_page(Pager* pager, u_int32_t page_num) {
-    if (page_num > TABLE_MAX_PAGES) {
-        printf("Tried to fetch page number out of bounds. %d > %d\n", page_num, TABLE_MAX_PAGES);
-        exit(EXIT_FAILURE);
-    }
-
-    if (pager->pages[page_num] == NULL) {
-        // cache miss!! allocate memory and load from file
-        void* page = malloc(PAGE_SIZE);
-        u_int32_t num_pages = pager->file_length / PAGE_SIZE;
-
-        // could potentially save part of an extra page at the end of the file
-        if (pager->file_length % PAGE_SIZE) {
-            num_pages += 1;
-        }
-
-        if (page_num <= num_pages) {
-            // moves 
-            lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
-            ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
-            if (bytes_read == -1) {
-                printf("Error reading file: %d\n", errno);
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        pager->pages[page_num] = page;
-
-        if (page_num >= pager->num_pages) {
-            pager->num_pages = page_num + 1;
-        }
-    }
-
-    return pager->pages[page_num];
-
-}
-
-// table_start() creates a new Cursor, which involves attaching a Table to it
-Cursor* table_start(Table* table) {
-    Cursor* cursor = malloc(sizeof(Cursor));
-    cursor->table = table;
-    cursor->page_num = table->root_page_num;
-    cursor->cell_num = 0;
-
-    return cursor;
 }
 
 // table_end() also creates a new Cursor, but places it at the end of the Table
