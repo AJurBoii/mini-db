@@ -223,6 +223,7 @@ void* get_page(Pager* pager, u_int32_t page_num) {
     }
 
     return pager->pages[page_num];
+
 }
 
 // cursor_value() replaces previous row_slot() function. it returns the location of the cursor within its associated table.
