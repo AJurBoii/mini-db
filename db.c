@@ -118,6 +118,35 @@ const u_int32_t INTERNAL_NODE_KEY_SIZE = sizeof(u_int32_t);
 const u_int32_t INTERNAL_NODE_CHILD_SIZE = sizeof(u_int32_t);
 const u_int32_t INTERNAL_NODE_CELL_SIZE = INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
 
+// functions for reading and writing into internal nodes
+u_int32_t* internal_node_num_keys(void* node) {
+    return node + INTERNAL_NODE_NUM_KEYS_OFFSET;
+}
+
+u_int32_t* internal_node_right_child(void* node) {
+    return node + INTERNAL_NODE_RIGHT_CHILD_OFFSET;
+}
+
+u_int32_t* internal_node_cell(void* node, u_int32_t cell_num) {
+    return node + INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE;
+}
+
+u_int32_t* internal_node_child(void* node, u_int32_t child_num) {
+    u_int32_t num_keys = *internal_node_num_keys(node);
+    if (child_num > num_keys) {
+        printf("Tried to acces child_num %d > num_keys %d\n", child_num, num_keys);
+        exit(EXIT_FAILURE);
+    } else if (child_num == num_keys) {
+        return internal_node_right_child(node);
+    } else {
+        return internal_node_cell(node, child_num);
+    }
+}
+
+u_int32_t* internal_node_key(void* node, u_int32_t key_num) {
+    return internal_node_cell(node, key_num) + INTERNAL_NODE_CHILD_SIZE;
+}
+
 // a Pager object helps connect a Table and its contents to a database file. it also helps navigate through such db files
 typedef struct {
     int file_descriptor;
