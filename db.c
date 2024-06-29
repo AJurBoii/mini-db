@@ -373,6 +373,14 @@ void pager_flush(Pager* pager, u_int32_t page_num) {
     }
 }
 
+// helper function for leaf_node_insert(); if no space is left on the leaf node, it splits it until an upper and lower node
+void leaf_node_split_and_insert(Cursor* cursor, u_int32_t key, Row* value) {
+    void* old_node = get_page(cursor->table->pager, cursor->page_num);
+    u_int32_t new_page_num = get_unused_page_num(cursor->table->pager);
+    void* new_node = get_page(cursor->table->pager, new_page_num);
+    initialize_leaf_node(new_node);
+}
+
 // inserts a node into the B-tree
 void leaf_node_insert(Cursor* cursor, u_int32_t key, Row* value) {
     void* node = get_page(cursor->table->pager, cursor->page_num);
