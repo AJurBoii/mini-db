@@ -316,16 +316,6 @@ Cursor* internal_node_find(Table* table, u_int32_t page_num, u_int32_t key) {
     }
 }
 
-// table_start() creates a new Cursor, which involves attaching a Table to it
-Cursor* table_start(Table* table) {
-    Cursor* cursor = malloc(sizeof(Cursor));
-    cursor->table = table;
-    cursor->page_num = table->root_page_num;
-    cursor->cell_num = 0;
-
-    return cursor;
-}
-
 // returns the position of the given key in the tree. if key isn't present, return the position where it should be inserted
 Cursor* table_find(Table* table, u_int32_t key) {
     u_int32_t root_page_num = table->root_page_num;
@@ -338,6 +328,15 @@ Cursor* table_find(Table* table, u_int32_t key) {
     }
 }
 
+Cursor* table_start(Table* table) {
+    Cursor* cursor = table_find(table, 0);
+
+    void* node = get_page(table->pager, cursor->page_num);
+    u_int32_t num_cells = *leaf_node_num_cells(node);
+    cursor->end_of_table = (num_cells == 0);
+
+    return cursor;
+}
 
 void print_row(Row* row) {
     printf("(%d, %s, %s)\n", row->id, row->username, row->email);
