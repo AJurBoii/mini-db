@@ -314,7 +314,6 @@ Cursor* internal_node_find(Table* table, u_int32_t page_num, u_int32_t key) {
         case NODE_INTERNAL:
             return internal_node_find(table, child_num, key);
     }
-
 }
 
 // table_start() creates a new Cursor, which involves attaching a Table to it
