@@ -245,6 +245,11 @@ void* leaf_node_value(void* node, u_int32_t cell_num) {
     return leaf_node_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
 }
 
+void set_node_type(void* node, NodeType type) {
+    u_int8_t value = type;
+    *((u_int8_t*)(node + NODE_TYPE_OFFSET)) = value;
+}
+
 void initialize_leaf_node(void* node) {
     set_node_type(node, NODE_LEAF);
     set_node_root(node, false);
@@ -261,11 +266,6 @@ void initialize_internal_node(void* node) {
 NodeType get_node_type(void* node) {
     u_int8_t value = *((u_int8_t*)(node + NODE_TYPE_OFFSET));
     return (NodeType)value;
-}
-
-void set_node_type(void* node, NodeType type) {
-    u_int8_t value = type;
-    *((u_int8_t*)(node + NODE_TYPE_OFFSET)) = value;
 }
 
 // search for a leaf node using binary search
@@ -671,6 +671,16 @@ void print_tree(Pager* pager, u_int32_t page_num, u_int32_t indentation_level) {
     }
 }
 
+// print out all constants
+void print_constants() {
+    printf("ROW_SIZE: %d\n", ROW_SIZE);
+    printf("COMMON_NODE_HEADER_SIZE: %d\n", COMMON_NODE_HEADER_SIZE);
+    printf("LEAF_NODE_HEADER_SIZE: %d\n", LEAF_NODE_HEADER_SIZE);
+    printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
+    printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
+    printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
+}
+
 // parse meta commands
 MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table) {
     if (strcmp(input_buffer->buffer, ".exit") == 0) {
@@ -790,16 +800,6 @@ ExecuteResult execute_statement(Statement* statement, Table* table) {
 
 // print prompt to the output to indicate user input
 void print_prompt() { printf("db > "); }
-
-// print out all constants
-void print_constants() {
-    printf("ROW_SIZE: %d\n", ROW_SIZE);
-    printf("COMMON_NODE_HEADER_SIZE: %d\n", COMMON_NODE_HEADER_SIZE);
-    printf("LEAF_NODE_HEADER_SIZE: %d\n", LEAF_NODE_HEADER_SIZE);
-    printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
-    printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
-    printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
-}
 
 // Reads and stores user input
 void read_input(InputBuffer* input_buffer) {
