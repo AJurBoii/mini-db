@@ -224,6 +224,10 @@ void set_node_root(void* node, bool is_root) {
     *((u_int8_t*)(node + IS_ROOT_OFFSET)) = value;
 }
 
+u_int32_t* leaf_node_next_leaf(void* node) {
+    return node + LEAF_NODE_NEXT_LEAF_OFFSET;
+}
+
 // some pointer arithmetic functions that return pointers to values, so the functions can be used both as getters and setters
 u_int32_t* leaf_node_num_cells(void* node) {
     return node + LEAF_NODE_NUM_CELLS_OFFSET;
@@ -245,6 +249,7 @@ void initialize_leaf_node(void* node) {
     set_node_type(node, NODE_LEAF);
     set_node_root(node, false);
     *leaf_node_num_cells(node) = 0;
+    *leaf_node_next_leaf(node) = 0; // 0 means there is no sibling and thus this node is the last child of its parent
 }
 
 void initialize_internal_node(void* node) {
