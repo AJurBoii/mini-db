@@ -3,7 +3,11 @@ describe 'database' do
         raw_output = nil
         IO.popen("./db mydb.db", "r+") do |pipe|
             commands.each do |command|
-                pipe.puts command
+                begin
+                    pipe.puts command
+                rescue Errno::EPIPE
+                    break
+                end
             end
 
             pipe.close_write
@@ -27,14 +31,17 @@ describe 'database' do
     #     ])
     # end
 
-    # it 'prints error message when table is full' do
-    #     script = (1..1401).map do |i|
-    #         "insert #{i} user#{i} person#{i}@example.com"
-    #     end
-    #     script << ".exit"
-    #     result = run_script(script)
-    #     expect(result[-2]).to eq('db > Error: Table full.')
-    # end
+    it 'prints error message when table is full' do
+        script = (1..1401).map do |i|
+            "insert #{i} user#{i} person#{i}@example.com"
+        end
+        script << ".exit"
+        result = run_script(script)
+        expect(result.last(2)).to match_array([
+            "db > Executed.",
+            "db > Need to implement updating parent after split",
+        ])
+    end
 
 
     # it 'allows inserting strings that are the maximum length' do
