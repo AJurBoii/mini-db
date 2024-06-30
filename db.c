@@ -590,7 +590,7 @@ void close_input_buffer(InputBuffer* input_buffer) {
 // helper function for print_tree(). taking the tree level as input, it indents before printing the node based on how deep it is in the tree
 void indent(u_int32_t level) {
     for (u_int32_t i = 0; i < level; i++) {
-        printf(" ");
+        printf("  ");
     }
 }
 
@@ -618,7 +618,7 @@ void print_tree(Pager* pager, u_int32_t page_num, u_int32_t indentation_level) {
                 print_tree(pager, child, indentation_level + 1);
 
                 indent(indentation_level + 1);
-                printf(" - key %d\n", *internal_node_key(node, i));
+                printf("- key %d\n", *internal_node_key(node, i));
             }
             child = *internal_node_right_child(node);
             print_tree(pager, child, indentation_level + 1);
