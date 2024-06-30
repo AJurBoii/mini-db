@@ -207,6 +207,17 @@ void* get_page(Pager* pager, u_int32_t page_num) {
 
 }
 
+// getter/setter for root node
+bool is_node_root(void* node) {
+    u_int8_t value = *((u_int8_t*)(node + IS_ROOT_OFFSET));
+    return (bool)value;
+}
+
+void set_node_root(void* node, bool is_root) {
+    u_int8_t value = is_root;
+    *((u_int8_t*)(node + IS_ROOT_OFFSET)) = value;
+}
+
 // some pointer arithmetic functions that return pointers to values, so the functions can be used both as getters and setters
 u_int32_t* leaf_node_num_cells(void* node) {
     return node + LEAF_NODE_NUM_CELLS_OFFSET;
@@ -226,7 +237,14 @@ void* leaf_node_value(void* node, u_int32_t cell_num) {
 
 void initialize_leaf_node(void* node) {
     set_node_type(node, NODE_LEAF);
+    set_node_root(node, false);
     *leaf_node_num_cells(node) = 0;
+}
+
+void initialize_internal_node(void* node) {
+    set_node_type(node, NODE_INTERNAL);
+    set_node_root(node, false);
+    *internal_node_num_keys(node) = 0;
 }
 
 NodeType get_node_type(void* node) {
@@ -450,17 +468,6 @@ void create_new_root(Table* table, u_int32_t right_child_page_num) {
     u_int32_t left_child_max_key = get_node_max_key(left_child);
     *internal_node_key(root, 0) = left_child_max_key;
     *internal_node_right_child(root) = right_child_page_num;
-}
-
-// getter/setter for root node
-bool is_node_root(void* node) {
-    u_int8_t value = *((u_int8_t*)(node + IS_ROOT_OFFSET));
-    return (bool)value;
-}
-
-void set_node_root(void* node, bool is_root) {
-    u_int8_t value = is_root;
-    *((u_int8_t*)(node + IS_ROOT_OFFSET)) = value;
 }
 
 // helper function for leaf_node_insert(); if no space is left on the leaf node, it splits it until an upper and lower node
