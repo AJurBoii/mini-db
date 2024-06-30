@@ -421,6 +421,15 @@ u_int32_t get_unused_page_num(Pager* pager) {
     return pager->num_pages;
 }
 
+u_int32_t get_node_max_key(void* node) {
+    switch (get_node_type(node)) {
+        case NODE_INTERNAL:
+            return *internal_node_key(node, *internal_node_num_keys(node) - 1);
+        case NODE_LEAF:
+            return *leaf_node_key(node, *leaf_node_num_cells(node) - 1);
+    }
+}
+
 // helper for the helper for leaf_node_insert() lol. we already allocated the right child node and moved the upper half of its parent into it.
 // now we just gotta allocate the left child node.
 void create_new_root(Table* table, u_int32_t right_child_page_num) {
