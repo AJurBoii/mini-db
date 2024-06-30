@@ -452,6 +452,17 @@ void create_new_root(Table* table, u_int32_t right_child_page_num) {
     *internal_node_right_child(root) = right_child_page_num;
 }
 
+// getter/setter for root node
+bool is_node_root(void* node) {
+    u_int8_t value = *((u_int8_t*)(node + IS_ROOT_OFFSET));
+    return (bool)value;
+}
+
+void set_node_root(void* node, bool is_root) {
+    u_int8_t value = is_root;
+    *((u_int8_t*)(node + IS_ROOT_OFFSET)) = value;
+}
+
 // helper function for leaf_node_insert(); if no space is left on the leaf node, it splits it until an upper and lower node
 void leaf_node_split_and_insert(Cursor* cursor, u_int32_t key, Row* value) {
     /**
