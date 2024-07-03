@@ -494,6 +494,10 @@ u_int32_t get_node_max_key(void* node) {
     }
 }
 
+u_int32_t* node_parent(void* node) {
+    return node + PARENT_POINTER_OFFSET;
+}
+
 // helper for the helper for leaf_node_insert() lol. we already allocated the right child node and moved the upper half of its parent into it.
 // now we just gotta allocate the left child node.
 void create_new_root(Table* table, u_int32_t right_child_page_num) {
