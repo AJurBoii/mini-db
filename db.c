@@ -522,9 +522,11 @@ void leaf_node_split_and_insert(Cursor* cursor, u_int32_t key, Row* value) {
      * Splitting the node into two
      * */
     void* old_node = get_page(cursor->table->pager, cursor->page_num);
+    u_int32_t old_max = get_node_max_key(old_node);
     u_int32_t new_page_num = get_unused_page_num(cursor->table->pager);
     void* new_node = get_page(cursor->table->pager, new_page_num);
     initialize_leaf_node(new_node);
+    *node_parent(new_node) = *node_parent(old_node);
     *leaf_node_next_leaf(new_node) = *leaf_node_next_leaf(old_node);
     *leaf_node_next_leaf(old_node) = new_page_num;
 
@@ -564,8 +566,13 @@ void leaf_node_split_and_insert(Cursor* cursor, u_int32_t key, Row* value) {
     if (is_node_root(old_node)) {
         return create_new_root(cursor->table, new_page_num);
     } else {
-        printf("Need to implement updating parent after split\n");
-        exit(EXIT_FAILURE);
+        u_int32_t parent_page_num = *node_parent(old_node);
+        u_int32_t new_max = get_node_max_key(old_node);
+        void* parent = get_page(cursor->table->pager, parent_page_num);
+
+        update_internal_node_key(parent, old_max, new_max);
+        internal_node_insert(cursor->table, parent_page_num);
+        return;
     }
 }
 
