@@ -518,6 +518,13 @@ void create_new_root(Table* table, u_int32_t right_child_page_num) {
     u_int32_t left_child_max_key = get_node_max_key(left_child);
     *internal_node_key(root, 0) = left_child_max_key;
     *internal_node_right_child(root) = right_child_page_num;
+    *node_parent(left_child) = table->root_page_num;
+    *node_parent(right_child) = table->root_page_num;
+}
+
+void update_internal_node_key(void* node, u_int32_t old_key, u_int32_t new_key) {
+    u_int32_t old_child_index = internal_node_find_child(node, old_key);
+    *internal_node_key(node, old_child_index) = new_key;
 }
 
 // helper function for leaf_node_insert(); if no space is left on the leaf node, it splits it until an upper and lower node
